@@ -45,6 +45,9 @@ main = ->
   dateScale.range([30, 500])
   window.dateScale = dateScale
 
+  pair = (x, y) ->
+    "#{x},#{y}"
+
   toLine = (solution) ->
     itinerary = solution.itinerary
     legs = itinerary.slices[0].legs
@@ -52,11 +55,16 @@ main = ->
     startY = airportScale(legs[0].origin)
     path = ['M']
     for leg in legs
-      path.push(dateScale(new Date(leg.departure)))
-      path.push(airportScale(leg.origin))
-      path.push('L')
-      path.push(dateScale(new Date(leg.arrival)))
-      path.push(airportScale(leg.destination))
+      startX = dateScale(new Date(leg.departure))
+      endX = dateScale(new Date(leg.arrival))
+      startY = airportScale(leg.origin)
+      endY = airportScale(leg.destination)
+
+      path.push(pair(startX, startY))
+      path.push('C')
+      path.push(pair((startX + endX) / 2, startY))
+      path.push(pair((startX + endX) / 2, endY))
+      path.push(pair(endX, endY))
       path.push('L')
     path.pop()
     path.join(' ')
