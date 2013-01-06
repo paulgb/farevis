@@ -37,12 +37,12 @@ main = ->
 
   airportScale = d3.scale.ordinal()
   airportScale.domain(allAirports)
-  airportScale.rangeBands([0, 300])
+  airportScale.rangeBands([10, 300])
   window.airportScale = airportScale
 
   dateScale = d3.time.scale()
   dateScale.domain([d3.min(flightTimes), d3.max(flightTimes)])
-  dateScale.range([0, 500])
+  dateScale.range([30, 500])
   window.dateScale = dateScale
 
   toLine = (solution) ->
@@ -61,6 +61,15 @@ main = ->
     path.pop()
     path.join(' ')
     
+  svg.selectAll('text')
+     .data(allAirports)
+     .enter()
+     .append('text')
+       .attr('x', 0)
+       .attr('y', airportScale)
+       .style('dominant-baseline', 'middle')
+       .text((x) -> x)
+
   svg.selectAll('path')
      .data(solutions)
      .enter()
