@@ -11,7 +11,7 @@ main = ->
 
   container = d3.select('#solutionPane td.itaRoundedPaneMain')
   container.select('*').remove()
-  container.attr('style', 'height: 500px')
+  container.attr('style', 'height: 600px')
   svg = container.append('svg:svg')
   width = svg[0][0].offsetWidth
   height = svg[0][0].offsetHeight
@@ -86,12 +86,17 @@ main = ->
       path.push('L')
     path.pop()
     path.join(' ')
+
+  svg.append('rect')
+     .attr('height', '100%')
+     .attr('width', '100%')
+     .attr('fill', 'white')
     
   svg.selectAll('text.yAxis')
      .data(allAirports)
      .enter()
      .append('text')
-       .attr('x', 0)
+       .attr('x', 10)
        .attr('y', airportScale)
        .style('dominant-baseline', 'middle')
        .text((x) -> x)
@@ -109,15 +114,25 @@ main = ->
          .style('dominant-baseline', 'middle')
          .text((x) -> moment(x).format('HH:mm'))
 
-  svg.selectAll('path.flight')
+  flightPaths = svg.selectAll('path.flight')
      .data(solutions)
      .enter()
+
+  ###
+  flightPaths
      .append('path')
        .attr('d', toLine)
-       .style('stroke-width', 2)
+       .style('stroke-width', 8)
+       .style('stroke', 'white')
+       .style('fill', 'none')
+  ###
+
+  flightPaths
+     .append('path')
+       .attr('d', toLine)
+       .style('stroke-width', 4)
        .style('stroke', (x) -> carrierToColorMap[x.itinerary.slices[0].legs[0].carrier])
        .style('fill', 'none')
-       .style('opacity', '0.3')
 
 main()
 
