@@ -1,6 +1,7 @@
 
 d3 = require 'd3'
 {Set} = require 'simplesets'
+moment = require 'moment'
 
 main = ->
   # Click "Time bars" link
@@ -12,6 +13,8 @@ main = ->
   container.select('*').remove()
   container.attr('style', 'height: 500px')
   svg = container.append('svg:svg')
+  width = svg[0][0].offsetWidth
+  height = svg[0][0].offsetHeight
 
   solutions = ita.flightsPage.flightsPanel.flightList.summary.solutions
 
@@ -20,33 +23,45 @@ main = ->
   intermediates = new Set()
 
   flightTimes = []
+  airportTimezones = {}
 
   for solution in solutions
     legs = solution.itinerary.slices[0].legs
     for leg, index in legs
       flightTimes.push(new Date(leg.departure))
       flightTimes.push(new Date(leg.arrival))
+      
+      airportTimezones[leg.origin] = ita.isoOffsetInMinutes(leg.departure)
+      airportTimezones[leg.destination] = ita.isoOffsetInMinutes(leg.arrival)
       if index == 0
         origins.add(leg.origin)
+      else
+        intermediates.add(leg.origin)
       if index == legs.length - 1
         destinations.add(leg.destination)
       else
         intermediates.add(leg.destination)
 
-  allAirports = origins.array().concat(intermediates.array()).concat(destinations.array())
+  intermediatesA = intermediates.array().sort((a, b) -> airportTimezones[b] - airportTimezones[a])
+  console.log intermediatesA
+
+  window.airportTimezones = airportTimezones
+  allAirports = origins.array().concat(intermediatesA).concat(destinations.array())
 
   airportScale = d3.scale.ordinal()
   airportScale.domain(allAirports)
-  airportScale.rangeBands([10, 300])
+  airportScale.rangeBands([20, height])
   window.airportScale = airportScale
 
   dateScale = d3.time.scale()
   dateScale.domain([d3.min(flightTimes), d3.max(flightTimes)])
-  dateScale.range([30, 500])
+  dateScale.range([40, width])
   window.dateScale = dateScale
 
   pair = (x, y) ->
     "#{x},#{y}"
+
+  carrierToColorMap = ita.flightsPage.matrix.stopCarrierMatrix.carrierToColorMap
 
   toLine = (solution) ->
     itinerary = solution.itinerary
@@ -64,12 +79,15 @@ main = ->
       path.push('C')
       path.push(pair((startX + endX) / 2, startY))
       path.push(pair((startX + endX) / 2, endY))
+      #path.push(pair(endX, startY))
+      #path.push(pair(startX, endY))
+
       path.push(pair(endX, endY))
       path.push('L')
     path.pop()
     path.join(' ')
     
-  svg.selectAll('text')
+  svg.selectAll('text.yAxis')
      .data(allAirports)
      .enter()
      .append('text')
@@ -78,13 +96,26 @@ main = ->
        .style('dominant-baseline', 'middle')
        .text((x) -> x)
 
-  svg.selectAll('path')
+  svg.selectAll('g.timeGroup')
+     .data(allAirports)
+     .enter()
+     .append('g')
+       .attr('transform', (x) -> "translate(0, #{airportScale(x)})")
+       .selectAll('text')
+       .data(dateScale.ticks(10))
+       .enter()
+       .append('text')
+         .attr('x', dateScale)
+         .style('dominant-baseline', 'middle')
+         .text((x) -> moment(x).format('HH:mm'))
+
+  svg.selectAll('path.flight')
      .data(solutions)
      .enter()
      .append('path')
        .attr('d', toLine)
        .style('stroke-width', 2)
-       .style('stroke', 'red')
+       .style('stroke', (x) -> carrierToColorMap[x.itinerary.slices[0].legs[0].carrier])
        .style('fill', 'none')
 
 main()
