@@ -42,15 +42,26 @@ class Airport
     if (not @hops?) or hops < @hops
       @hops = hops
 
+  setMinDuration: (duration) ->
+    if (not @duration?) or duration < @duration
+      @duration = duration
+
   @compare: (a, b) ->
     if a.type == 'origin' or b.type == 'destination'
       return -1
     else if a.type == 'destination' or b.type == 'origin'
       return 1
+
+    else if a.duration < b.duration
+      return -1
+    else if a.duration > b.duration
+      return 1
+
     else if a.hops < b.hops
       return -1
     else if a.hops > b.hops
       return 1
+
     else
       return 0
 
@@ -76,6 +87,10 @@ class FlightVisualization
     @svg = container.append('svg:svg')
     @width = @svg[0][0].offsetWidth
     @height = @svg[0][0].offsetHeight
+    @svg.append('rect')
+        .attr('width', @width)
+        .attr('height', @height)
+        .style('fill', 'white')
 
   prepareScales: ->
     @airportScale = d3.scale.ordinal()
@@ -96,29 +111,59 @@ class FlightVisualization
         .style('dominant-baseline', 'middle')
         .text((airport) -> airport)
 
+  drawTimes: ->
+    @svg.selectAll('g.timeGroup')
+      .data(@airportsList)
+      .enter()
+      .append('g')
+        .attr('transform', (x) => "translate(0, #{@airportScale(x)})")
+        .selectAll('text')
+        .data(@dateScale.ticks(10))
+        .enter()
+        .append('text')
+          .attr('x', @dateScale)
+          .attr('fill', '#ccc')
+          .style('dominant-baseline', 'middle')
+          .text((x) -> moment(x).format('HH:mm'))
+
+
   draw: ->
     @get_data()
     @createSVG()
     @prepareScales()
     @drawYAxis()
+    @drawTimes()
 
     legPath = (leg) =>
       x1 = @dateScale(leg.departure)
       y1 = @airportScale(leg.origin.code)
       x2 = @dateScale(leg.arrival)
       y2 = @airportScale(leg.destination.code)
-      "M #{x1},#{y1} L #{x2},#{y2}"
+      dip = (x2 - x1) * .6
+      "M #{x1},#{y1} C #{x1 + dip},#{y1} #{x2 - dip},#{y2} #{x2},#{y2}"
 
-    @svg.selectAll('g.flight')
+    f = @svg.selectAll('g.flight')
         .data(@flights)
         .enter()
           .append('g')
           .selectAll('path')
           .data((x) -> x.legs)
           .enter()
+
+    f
+            .append('path')
+            .style('stroke', 'white')
+            .style('stroke-width', '7')
+            .style('stroke-linecap', 'square')
+            .style('fill', 'none')
+            .attr('d', legPath)
+
+    f
             .append('path')
             .style('stroke', (leg) -> leg.carrier.color)
             .style('stroke-width', '3')
+            .style('stroke-linecap', 'square')
+            .style('fill', 'none')
             .attr('d', legPath)
 
   get_data: ->
@@ -131,6 +176,7 @@ class FlightVisualization
     @flights = []
     @carriers = {}
 
+    @carriers.CONNECTION = new Carrier('CONNECTION', 'Connection', '#888')
     # Flight time range
     @maxArrival = moment(itaData.maxArrival)
     @minDeparture = moment(itaData.minDeparture)
@@ -174,9 +220,19 @@ class FlightVisualization
       endTime = moment(lastLeg.arrival)
 
       lastLeg = null
+      duration = 0
       for itaLeg, legIndex in itaLegs
+        if lastLeg?
+          leg = new Leg(@airports[lastLeg.destination],
+                        @airports[itaLeg.origin],
+                        moment(lastLeg.arrival),
+                        moment(itaLeg.departure),
+                        @carriers.CONNECTION)
+          legs.push(leg)
+
         airportOrigin = @airports[itaLeg.origin]
         airportDestination = @airports[itaLeg.destination]
+
         # Set time zones
         airportOrigin.setTz(isoOffsetInMinutes(itaLeg.departure))
         airportDestination.setTz(isoOffsetInMinutes(itaLeg.arrival))
@@ -185,6 +241,11 @@ class FlightVisualization
         airportOrigin.setMinHops(legIndex)
         airportDestination.setMinHops(legIndex + 1)
 
+        # Update duration
+        airportOrigin.setMinDuration(duration + 1)
+        duration = duration + itaLeg.duration
+        airportDestination.setMinDuration(duration)
+
         # Save leg
         leg = new Leg(airportOrigin,
                       airportDestination,
@@ -192,6 +253,7 @@ class FlightVisualization
                       moment(itaLeg.arrival),
                       @carriers[itaLeg.carrier])
         legs.push(leg)
+        lastLeg = itaLeg
 
       flight = new Flight(legs, price, startTime, endTime, index)
       @flights.push(flight)
