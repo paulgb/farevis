@@ -117,6 +117,7 @@ main = ->
        .style('stroke-width', 2)
        .style('stroke', (x) -> carrierToColorMap[x.itinerary.slices[0].legs[0].carrier])
        .style('fill', 'none')
+       .style('opacity', '0.3')
 
 main()
 
