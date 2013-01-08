@@ -142,22 +142,38 @@ class FlightVisualization
         .attr('x', 10)
         .attr('y', @airportScale)
         .style('dominant-baseline', 'middle')
+        .style('font-weight', 'bold')
         .text((airport) -> airport)
 
   drawTimes: ->
+    airportScale = @airportScale
+    dateScale = @dateScale
+    airports = @airports
     @svg.selectAll('g.timeGroup')
       .data(@airportsList)
       .enter()
       .append('g')
-        .attr('transform', (x) => "translate(0, #{@airportScale(x)})")
-        .selectAll('text')
-        .data(@dateScale.ticks(10))
-        .enter()
-        .append('text')
-          .attr('x', @dateScale)
-          .attr('fill', '#ccc')
-          .style('dominant-baseline', 'middle')
-          .text((x) -> moment(x).format('HH:mm'))
+      .each (airportCode) ->
+        airport = airports[airportCode]
+        g = d3.select(this)
+        g.attr('transform', "translate(0, #{airportScale(airportCode)})")
+
+        g
+          .selectAll('text')
+          .data(dateScale.ticks(20))
+          .enter()
+            .append('text')
+            .attr('x', dateScale)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '8px')
+            .style('dominant-baseline', 'middle')
+            .text((time) -> moment.utc(time).subtract('minutes', airport.tz).format('HH:mm'))
+            .attr 'fill', (time) ->
+              hour = moment.utc(time).clone().subtract('minutes', airport.tz).hours()
+              if hour > 7 and hour < 22
+                '#ddd'
+              else
+                '#888'
 
 
   draw: ->
@@ -183,8 +199,8 @@ class FlightVisualization
         .enter()
           .append('g')
           .each (flight) ->
-            selection = d3.select(this)
-            flightPath = selection.selectAll('path')
+            flightPath = d3.select(this)
+                          .selectAll('path')
                           .data((flight) -> flight.legs)
                           .enter()
 
@@ -217,8 +233,8 @@ class FlightVisualization
 
     @carriers.CONNECTION = new Carrier('CONNECTION', 'Connection', '#888')
     # Flight time range
-    @maxArrival = moment(itaData.maxArrival)
-    @minDeparture = moment(itaData.minDeparture)
+    @maxArrival = moment.utc(itaData.maxArrival)
+    @minDeparture = moment.utc(itaData.minDeparture)
 
     # Load City data
     for code, itaCity of itaData.data.cities
@@ -259,8 +275,8 @@ class FlightVisualization
       lastLeg = itaLegs[itaLegs.length - 1]
 
       # Flight duration
-      startTime = moment(firstLeg.departure)
-      endTime = moment(lastLeg.arrival)
+      startTime = moment.utc(firstLeg.departure)
+      endTime = moment.utc(lastLeg.arrival)
 
       lastLeg = null
       duration = 0
@@ -268,8 +284,8 @@ class FlightVisualization
         if lastLeg?
           leg = new Leg(@airports[lastLeg.destination],
                         @airports[itaLeg.origin],
-                        moment(lastLeg.arrival),
-                        moment(itaLeg.departure),
+                        moment.utc(lastLeg.arrival),
+                        moment.utc(itaLeg.departure),
                         @carriers.CONNECTION)
           legs.push(leg)
 
@@ -295,8 +311,8 @@ class FlightVisualization
         # Save leg
         leg = new Leg(airportOrigin,
                       airportDestination,
-                      moment(itaLeg.departure),
-                      moment(itaLeg.arrival),
+                      moment.utc(itaLeg.departure),
+                      moment.utc(itaLeg.arrival),
                       @carriers[itaLeg.carrier])
         legs.push(leg)
         lastLeg = itaLeg
