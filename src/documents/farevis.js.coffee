@@ -3,6 +3,7 @@ d3 = require 'd3'
 moment = require 'moment'
 
 class Flight
+  # Represent an itinerary for one flight
   constructor: (@legs, @price, @startTime, @endTime, @index) ->
 
   superior: (otherFlight) ->
@@ -30,9 +31,13 @@ class Flight
     return true
 
 class Leg
+  # Represent a leg of a flight (connections are considered legs, usually
+  # with the same origin and destination but occasionally different airports
+  # within the same city)
   constructor: (@origin, @destination, @departure, @arrival, @carrier) ->
 
 class Airport
+  # Represent an airport
   constructor: (@code, @city, @timezone, @type) ->
     @group = [this]
 
@@ -90,18 +95,17 @@ class Airport
       return 0
 
 class City
+  # Represent a city
   constructor: (@code, @name) ->
 
 class Carrier
+  # Represent an airline
   constructor: (@code, @name, @color) ->
 
-class Gate
-  constructor: (@code, @airport) ->
-
-class FlightEvent
-  constructor: (@flightIndex, @airport, @time, @type) ->
-
 class FlightVisualization
+  # This class is the workhorse of the visualization.
+  # Gathers the data and creates the SVG.
+
   constructor: (@ita) ->
 
   createSVG: ->
@@ -124,6 +128,11 @@ class FlightVisualization
     @dateScale = d3.time.scale()
     @dateScale.domain([@minDeparture, @maxArrival])
     @dateScale.range([40, @width])
+
+    @priceScale = d3.scale.linear()
+    @priceScale.domain([@minPrice, @maxPrice])
+    @priceScale.range(['#00ff00', '#ff0000'])
+    @priceScale.interpolate = d3.interpolateHsl
 
   drawYAxis: ->
     @svg.selectAll('text.yAxis')
@@ -154,6 +163,7 @@ class FlightVisualization
   draw: ->
     @get_data()
     console.log this
+    window.flightVisualization = this
     @createSVG()
     @prepareScales()
     @drawYAxis()
@@ -172,7 +182,7 @@ class FlightVisualization
         .enter()
           .append('g')
           .selectAll('path')
-          .data((x) -> x.legs)
+          .data((flight) -> flight.legs)
           .enter()
 
     f
@@ -185,7 +195,7 @@ class FlightVisualization
 
     f
             .append('path')
-            .style('stroke', (leg) -> leg.carrier.color)
+            .style('stroke', (leg) => @priceScale(leg.flight.price))
             .style('stroke-width', '3')
             .style('stroke-linecap', 'square')
             .style('fill', 'none')
@@ -235,6 +245,10 @@ class FlightVisualization
     for solution, index in itaData.summary.solutions
       legs = []
       price = parseFloat(solution.itinerary.pricings[0].displayPrice.substring(3))
+      if not @minPrice? or @minPrice > price
+        @minPrice = price
+      if not @maxPrice? or @maxPrice < price
+        @maxPrice = price
       itaLegs = solution.itinerary.slices[0].legs
 
       firstLeg = itaLegs[0]
@@ -284,6 +298,8 @@ class FlightVisualization
         lastLeg = itaLeg
 
       flight = new Flight(legs, price, startTime, endTime, index)
+      for leg in legs
+        leg.flight = flight
       @flights.push(flight)
 
     # Get rid of duplicate and inferior flights
