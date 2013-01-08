@@ -123,15 +123,20 @@ class FlightVisualization
   prepareScales: ->
     @airportScale = d3.scale.ordinal()
     @airportScale.domain(@airportsList)
-    @airportScale.rangeBands([20, @height])
+    @airportScale.rangeBands([30, @height])
 
     @dateScale = d3.time.scale()
     @dateScale.domain([@minDeparture, @maxArrival])
-    @dateScale.range([40, @width])
+    @dateScale.range([40, @width - 20])
 
     @priceScale = d3.scale.linear()
     @priceScale.domain([@minPrice, @maxPrice])
     @priceScale.range(['#00ff00', '#ff0000'])
+    @priceScale.interpolate = d3.interpolateHsl
+
+    @hourScale = d3.scale.linear()
+    @hourScale.domain([0, 12, 23])
+    @hourScale.range(['#0000dd', '#dddd00', '#0000dd'])
     @priceScale.interpolate = d3.interpolateHsl
 
   drawYAxis: ->
@@ -149,6 +154,7 @@ class FlightVisualization
     airportScale = @airportScale
     dateScale = @dateScale
     airports = @airports
+    hourScale = @hourScale
     @svg.selectAll('g.timeGroup')
       .data(@airportsList)
       .enter()
@@ -158,22 +164,38 @@ class FlightVisualization
         g = d3.select(this)
         g.attr('transform', "translate(0, #{airportScale(airportCode)})")
 
+        g.selectAll('circle.y')
+          .data(dateScale.ticks(60))
+          .enter()
+            .append('circle')
+            .attr('cx', dateScale)
+            .attr('r', 2)
+            .style('opacity', 0.3)
+            .attr 'fill', (time) ->
+              hourScale(moment.utc(time).clone().subtract('minutes', airport.tz).hours())
+
+        g.selectAll('circle.x')
+          .data(dateScale.ticks(20))
+          .enter()
+            .append('circle')
+            .attr('cx', dateScale)
+            .attr('r', 2)
+            .attr 'fill', (time) ->
+              hourScale(moment.utc(time).clone().subtract('minutes', airport.tz).hours())
+
         g
           .selectAll('text')
           .data(dateScale.ticks(20))
           .enter()
             .append('text')
             .attr('x', dateScale)
+            .attr('y', -10)
             .attr('text-anchor', 'middle')
             .attr('font-size', '8px')
             .style('dominant-baseline', 'middle')
-            .text((time) -> moment.utc(time).subtract('minutes', airport.tz).format('HH:mm'))
+            .text((time) -> moment.utc(time).clone().subtract('minutes', airport.tz).format('ha'))
             .attr 'fill', (time) ->
-              hour = moment.utc(time).clone().subtract('minutes', airport.tz).hours()
-              if hour > 7 and hour < 22
-                '#ddd'
-              else
-                '#888'
+              hourScale(moment.utc(time).clone().subtract('minutes', airport.tz).hours())
 
 
   draw: ->
@@ -210,11 +232,11 @@ class FlightVisualization
                 .style('stroke-width', '7')
                 .style('stroke-linecap', 'square')
                 .style('fill', 'none')
+                .style('opacity', '.8')
                 .attr('d', legPath)
 
             flightPath
                 .append('path')
-                #.style('stroke', priceScale(flight.price))
                 .style('stroke', (leg) -> leg.carrier.color)
                 .style('stroke-width', '3')
                 .style('stroke-linecap', 'square')
