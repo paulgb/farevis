@@ -186,20 +186,20 @@ class FlightVisualization
           .enter()
 
     f
-            .append('path')
-            .style('stroke', 'white')
-            .style('stroke-width', '7')
-            .style('stroke-linecap', 'square')
-            .style('fill', 'none')
-            .attr('d', legPath)
+      .append('path')
+      .style('stroke', 'white')
+      .style('stroke-width', '7')
+      .style('stroke-linecap', 'square')
+      .style('fill', 'none')
+      .attr('d', legPath)
 
     f
-            .append('path')
-            .style('stroke', (leg) => @priceScale(leg.flight.price))
-            .style('stroke-width', '3')
-            .style('stroke-linecap', 'square')
-            .style('fill', 'none')
-            .attr('d', legPath)
+        .append('path')
+        .style('stroke', (leg) => leg.carrier.color)
+        .style('stroke-width', '3')
+        .style('stroke-linecap', 'square')
+        .style('fill', 'none')
+        .attr('d', legPath)
 
   get_data: ->
     itaData = @ita.flightsPage.flightsPanel.flightList
@@ -298,8 +298,6 @@ class FlightVisualization
         lastLeg = itaLeg
 
       flight = new Flight(legs, price, startTime, endTime, index)
-      for leg in legs
-        leg.flight = flight
       @flights.push(flight)
 
     # Get rid of duplicate and inferior flights
