@@ -177,29 +177,33 @@ class FlightVisualization
       dip = (x2 - x1) * .6
       "M #{x1},#{y1} C #{x1 + dip},#{y1} #{x2 - dip},#{y2} #{x2},#{y2}"
 
+    priceScale = @priceScale
     f = @svg.selectAll('g.flight')
         .data(@flights)
         .enter()
           .append('g')
-          .selectAll('path')
-          .data((flight) -> flight.legs)
-          .enter()
+          .each (flight) ->
+            selection = d3.select(this)
+            flightPath = selection.selectAll('path')
+                          .data((flight) -> flight.legs)
+                          .enter()
 
-    f
-      .append('path')
-      .style('stroke', 'white')
-      .style('stroke-width', '7')
-      .style('stroke-linecap', 'square')
-      .style('fill', 'none')
-      .attr('d', legPath)
+            flightPath
+                .append('path')
+                .style('stroke', 'white')
+                .style('stroke-width', '7')
+                .style('stroke-linecap', 'square')
+                .style('fill', 'none')
+                .attr('d', legPath)
 
-    f
-        .append('path')
-        .style('stroke', (leg) => leg.carrier.color)
-        .style('stroke-width', '3')
-        .style('stroke-linecap', 'square')
-        .style('fill', 'none')
-        .attr('d', legPath)
+            flightPath
+                .append('path')
+                #.style('stroke', priceScale(flight.price))
+                .style('stroke', (leg) -> leg.carrier.color)
+                .style('stroke-width', '3')
+                .style('stroke-linecap', 'square')
+                .style('fill', 'none')
+                .attr('d', legPath)
 
   get_data: ->
     itaData = @ita.flightsPage.flightsPanel.flightList
