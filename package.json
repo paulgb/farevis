@@ -7,7 +7,7 @@
     "run": "docpad run"
   },
   "dependencies": {
-    "docpad": "~6.21.2",
+    "docpad": "~6.21.3",
     "moment": "~1.7.2",
     "browserify": "~1.17.1",
     "jquery": "~1.8.3",
