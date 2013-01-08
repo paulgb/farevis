@@ -385,10 +385,6 @@ class FlightVisualization
     # Dummy carrier for time spent at the airport or on ground transit
     # between airports
     @carriers.CONNECTION = new Carrier('CONNECTION', 'Connection', '#888')
-    
-    # Flight time range
-    @maxArrival = moment.utc(itaData.maxArrival)
-    @minDeparture = moment.utc(itaData.minDeparture)
 
     # Load City data
     for code, itaCity of itaData.data.cities
@@ -492,6 +488,14 @@ class FlightVisualization
       if not trim
         trimmed_flights.push(flight1)
     @flights = trimmed_flights
+
+    # Figure out minDeparture and maxArrival
+    for flight in @flights
+      if not @minDeparture? or flight.startTime < @minDeparture
+        @minDeparture = flight.startTime
+      if not @maxArrival? or flight.endTime > @maxArrival
+        @maxArrival = flight.endTime
+    console.log @minDeparture, @maxArrival
 
     # Trim airports
     valid_airports = {}
