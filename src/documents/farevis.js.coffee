@@ -35,11 +35,15 @@ class Leg
   # with the same origin and destination but occasionally different airports
   # within the same city)
   constructor: (@origin, @destination, @departure, @arrival, @carrier) ->
+    @originGate = 0
+    @destinationGate = 0
 
 class Airport
   # Represent an airport
   constructor: (@code, @city, @timezone, @type) ->
     @group = [this]
+    @numGates = 1
+    @freeGates = [0]
 
   pairWith: (airport) ->
     if airport not in @group
@@ -93,6 +97,20 @@ class Airport
 
     else
       return 0
+
+  getGate: ->
+    if @freeGates.length == 0
+      @freeGates.push(@numGates++)
+    return @freeGates.pop()
+
+  freeGate: (gateNumber) ->
+    @freeGates.push(gateNumber)
+    @freeGates.sort((a, b) -> b - a)
+
+  touchGate: ->
+    gate = @getGate()
+    @freeGate(gate)
+    gate
 
 class City
   # Represent a city
@@ -201,7 +219,6 @@ class FlightVisualization
   draw: ->
     @get_data()
     console.log this
-    window.flightVisualization = this
     @createSVG()
     @prepareScales()
     @drawYAxis()
@@ -209,9 +226,9 @@ class FlightVisualization
 
     legPath = (leg) =>
       x1 = @dateScale(leg.departure)
-      y1 = @airportScale(leg.origin.code)
+      y1 = @airportScale(leg.origin.code) + leg.originGate * 6
       x2 = @dateScale(leg.arrival)
-      y2 = @airportScale(leg.destination.code)
+      y2 = @airportScale(leg.destination.code) + leg.destinationGate * 6
       dip = (x2 - x1) * .6
       "M #{x1},#{y1} C #{x1 + dip},#{y1} #{x2 - dip},#{y2} #{x2},#{y2}"
 
@@ -309,6 +326,9 @@ class FlightVisualization
                         moment.utc(lastLeg.arrival),
                         moment.utc(itaLeg.departure),
                         @carriers.CONNECTION)
+          if legs.length > 0
+            legs[legs.length-1].nextLeg = leg
+            leg.prevLeg = legs[legs.length-1]
           legs.push(leg)
 
           if lastLeg.destination != itaLeg.origin
@@ -336,6 +356,11 @@ class FlightVisualization
                       moment.utc(itaLeg.departure),
                       moment.utc(itaLeg.arrival),
                       @carriers[itaLeg.carrier])
+
+        if legs.length > 0
+          legs[legs.length-1].nextLeg = leg
+          leg.prevLeg = legs[legs.length-1]
+
         legs.push(leg)
         lastLeg = itaLeg
 
@@ -360,6 +385,61 @@ class FlightVisualization
       for leg in flight.legs
         valid_airports[leg.origin.code] = leg.origin
         valid_airports[leg.destination.code] = leg.destination
+
+    # Create a list of Flight Events
+    flightEvents = []
+    for flight in @flights
+      for leg in flight.legs
+        if leg.carrier == @carriers.CONNECTION
+          if leg.origin == leg.destination
+            flightEvents.push
+              flight: flight.index
+              event: 'landing'
+              time: leg.departure
+              airport: leg.origin
+              leg: leg
+            flightEvents.push
+              flight: flight.index
+              event: 'takeoff'
+              time: leg.arrival
+              airport: leg.destination
+              leg: leg
+          else
+            flightEvents.push
+              flight: flight.index
+              event: 'touch'
+              time: leg.departure
+              airport: leg.origin
+              leg: leg
+            flightEvents.push
+              flight: flight.index
+              event: 'touch'
+              time: leg.arrival
+              airport: leg.destination
+              leg: leg.nextLeg
+
+    flightEvents = flightEvents.sort((a, b) -> a.time - b.time)
+    
+    # Allocate Gates
+    gatesInUse = {}
+    for event in flightEvents
+      if event.event == 'landing'
+        gate = event.airport.getGate()
+        gatesInUse[event.flight] = gate
+        event.leg.originGate = gate
+        event.leg.destinationGate = gate
+        event.leg.prevLeg.destinationGate = gate
+        event.leg.nextLeg.originGate = gate
+      else if event.event == 'takeoff'
+        gate = gatesInUse[event.flight]
+        airport = event.airport
+        airport.freeGate(gate)
+      else if event.event == 'touch'
+        gate = event.airport.touchGate()
+        event.leg.originGate = gate
+        event.leg.prevLeg.destinationGate = gate
+
+        
 
     # Create a sorted list of airports
     @airportsList = (airport for i, airport of valid_airports).sort(Airport.compare)
