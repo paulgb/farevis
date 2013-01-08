@@ -3,10 +3,11 @@
   "version": "0.0.1",
   "scripts": {
     "build": "docpad generate",
-    "serve": "docpad server"
+    "serve": "docpad server",
+    "run": "docpad run"
   },
   "dependencies": {
-    "docpad": "~6.21.0",
+    "docpad": "~6.21.2",
     "moment": "~1.7.2",
     "browserify": "~1.17.1",
     "jquery": "~1.8.3",

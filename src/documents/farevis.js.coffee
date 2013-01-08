@@ -34,6 +34,13 @@ class Leg
 
 class Airport
   constructor: (@code, @city, @timezone, @type) ->
+    @group = [this]
+
+  pairWith: (airport) ->
+    if airport not in @group
+      @group = @group.concat(airport.group)
+      for member in @group
+        member.group = @group
 
   setTz: (@tz) ->
     @city.tz = @tz
@@ -46,7 +53,24 @@ class Airport
     if (not @duration?) or duration < @duration
       @duration = duration
 
-  @compare: (a, b) ->
+  @compare: (a, b) =>
+    if a in b.group
+      @directCompare(a, b)
+    else
+      minA = a.group.sort(Airport.directCompare)[0]
+      minB = b.group.sort(Airport.directCompare)[0]
+      @directCompare(minA, minB)
+
+  @directCompare: (a, b) ->
+    # Compare two airports to determine an order.
+    # Rules for comparison are:
+    #   - origin airports are always first
+    #   - destination airports are always last
+    # For connecting airports,
+    #   - airports with a shorter minimum duration are first
+    #   - if duration is the same, airports with a lower
+    #     minimum number of hops (from any origin airport)  are 
+    #     first
     if a.type == 'origin' or b.type == 'destination'
       return -1
     else if a.type == 'destination' or b.type == 'origin'
@@ -129,6 +153,7 @@ class FlightVisualization
 
   draw: ->
     @get_data()
+    console.log this
     @createSVG()
     @prepareScales()
     @drawYAxis()
@@ -230,6 +255,9 @@ class FlightVisualization
                         @carriers.CONNECTION)
           legs.push(leg)
 
+          if lastLeg.destination != itaLeg.origin
+            @airports[lastLeg.destination].pairWith(@airports[itaLeg.origin])
+
         airportOrigin = @airports[itaLeg.origin]
         airportDestination = @airports[itaLeg.destination]
 
@@ -242,7 +270,7 @@ class FlightVisualization
         airportDestination.setMinHops(legIndex + 1)
 
         # Update duration
-        airportOrigin.setMinDuration(duration + 1)
+        airportOrigin.setMinDuration(duration)
         duration = duration + itaLeg.duration
         airportDestination.setMinDuration(duration)
 
@@ -270,7 +298,15 @@ class FlightVisualization
         trimmed_flights.push(flight1)
     @flights = trimmed_flights
 
-    @airportsList = (airport for i, airport of @airports).sort(Airport.compare)
+    # Trim airports
+    valid_airports = {}
+    for flight in @flights
+      for leg in flight.legs
+        valid_airports[leg.origin.code] = leg.origin
+        valid_airports[leg.destination.code] = leg.destination
+
+    # Create a sorted list of airports
+    @airportsList = (airport for i, airport of valid_airports).sort(Airport.compare)
     @airportsList = (airport.code for airport in @airportsList)
 
 main = ->
