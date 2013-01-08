@@ -1,15 +1,44 @@
 
+# Flight Timeline Visualization
+# By Paul Butler <vis@paulbutler.org> (2013)
+
+# Visualize a set of flights ranging over a similar set of
+# airports and a similar time span.
+
+# This implementation works when bundled up with browserify
+# (a node.js module) and injected into an ITA Matrix
+# results page. This can be accomplished by means of a
+# simple "bookmarklet" (see src/files/index.html).
+
 d3 = require 'd3'
 moment = require 'moment'
 
 class Flight
   # Represent an itinerary for one flight
   constructor: (@legs, @price, @startTime, @endTime, @index) ->
+    # Arguments
+    #   legs        an array of Leg objects
+    #   price       the price in local currency as a float
+    #   startTime   the start time of this flight
+    #   endTime     the end time of this flight
+    #   index       any unique identifier for this flight
 
   superior: (otherFlight) ->
-    # return true iff this flight is superior to otherFlight
+    # This function defines a partial order on flights.
+    # A flight is considered superior if it starts at least
+    # as late, ends at least as early, costs at most as much,
+    # and at least one of those attributes are "better".
+    # If all three attributes are the same, the tie is broken
+    # by comparing the index field, which will always be different.
+    # For two given flights, it is possible for neither to be
+    # superior to eachother, ie.
+    #   a.superior(b) == b.superior(a) == false
+    # but two flights can never be superior to eachother.
+    # No flight is superior to itself.
     
-    # is otherFlight superior to this flight?
+    # if the other flight is superior in at least one of
+    # startTime, endTime, or price, we can rule out this
+    # flight being superior to it
     if otherFlight.startTime > @startTime
       return false
     if otherFlight.endTime < @endTime
@@ -17,7 +46,8 @@ class Flight
     if otherFlight.price < @price
       return false
 
-    # Is this flight superior to otherFlight?
+    # Is this flight superior to otherFlight based
+    # on startTime, endTime, or price attributes?
     if otherFlight.startTime < @startTime
       return true
     if otherFlight.endTime > @endTime
@@ -25,7 +55,7 @@ class Flight
     if otherFlight.price > @price
       return true
 
-    # Arbitrary Tiebreaker
+    # Use the index as an arbitrary tiebreaker
     if otherFlight.index <= @index
       return false
     return true
@@ -35,34 +65,80 @@ class Leg
   # with the same origin and destination but occasionally different airports
   # within the same city)
   constructor: (@origin, @destination, @departure, @arrival, @carrier) ->
+    # Arguments:
+    #   origin        originating Airport
+    #   destination   destination Airport
+    #   departure     departure time
+    #   arrival       arrival time
+    #   carrier       Carrier object
+
+    # "Gates" are used to differentiate itineraries that connect at
+    # the same airport for overlapping time. We default to gate 0 until
+    # the gate assigning algorithm in get_data decides otherwise
     @originGate = 0
     @destinationGate = 0
+
+  setPrevLeg: (prevLeg) ->
+    if prevLeg?
+      @prevLeg = prevLeg
+      prevLeg.nextLeg = this
 
 class Airport
   # Represent an airport
   constructor: (@code, @city, @timezone, @type) ->
+    # Arguments
+    #   code      the airport's code
+    #   city      the airport's City
+    #   timezone  the airport's UTC offset in minutes
+    #   type      'origin', 'destionation', or 'connection'
+
+    # Airports are grouped together when ground transit
+    # is used between them in at least one itinerary.
+    # The groups are used by the comparison operator to ensure
+    # that airports in the same group are kept together.
     @group = [this]
-    @numGates = 1
-    @freeGates = [0]
+
+    @numGates = 1     # number of gates, used by the gate assigning algorithm
+    @freeGates = [0]  # set of free gates, used by the gate assigning algorihtm
 
   pairWith: (airport) ->
+    # Pair this airport with another airport.
+    # This is more complicated than you might expect, because we
+    # have to consider the case where the airport we are paring
+    # with is already paired to another airport (this can happen
+    # with, for example, LGA, JFK, and EWR).
     if airport not in @group
       @group = @group.concat(airport.group)
       for member in @group
         member.group = @group
 
   setTz: (@tz) ->
+    # Set the timezone of the airport (propogates to the city)
     @city.tz = @tz
 
-  setMinHops: (hops) ->
+  suggestMinHops: (hops) ->
+    # Suggest a minimum number of hops; if it is lower than the
+    # current minimum hops or no minimum hops value is unset,
+    # take the suggested value as the number of hops.
+    # Hops are the number of airports between an origin airport
+    # and this airport, on the shortest route.
     if (not @hops?) or hops < @hops
       @hops = hops
 
-  setMinDuration: (duration) ->
+  suggestMinDuration: (duration) ->
+    # Suggest a minimum duration; if it is lower than the
+    # current minimum duration or no minimum duration is unset,
+    # take the suggested value as duration
+    # Duration is the shortest trip (counting only time in the
+    # air) from an origin airport to this one, in minutes.
     if (not @duration?) or duration < @duration
       @duration = duration
 
   @compare: (a, b) =>
+    # Compare two airports to determine their order on the
+    # y-axis. If the airports belong to the same group,
+    # compare them directly, otherwise compare the "minimum"
+    # airport in each airport's group.
     if a in b.group
       @directCompare(a, b)
     else
@@ -98,16 +174,26 @@ class Airport
     else
       return 0
 
+  # Gate algorithm helper functions
+  # The functions getGate, freeGate, and touchGate
+  # are helper functions for the gate algorithm.
+  # They (and the data they touch) are not useful
+  # outside of the gate algorithm.
+   
   getGate: ->
+    # Get a free gate
     if @freeGates.length == 0
       @freeGates.push(@numGates++)
     return @freeGates.pop()
 
   freeGate: (gateNumber) ->
+    # Free a gate
     @freeGates.push(gateNumber)
     @freeGates.sort((a, b) -> b - a)
 
   touchGate: ->
+    # Get a gate which is free but do
+    # not cause the gate to become un-free
     gate = @getGate()
     @freeGate(gate)
     gate
@@ -125,8 +211,13 @@ class FlightVisualization
   # Gathers the data and creates the SVG.
 
   constructor: (@ita) ->
+    # Arguments:
+    # ita     the window.ita object which stores all the data
+    #         created by the native visualizations
 
   createSVG: ->
+    # Drop the old visualization from the page and create an
+    # svg object to contain the new one.
     container = d3.select('#solutionPane td.itaRoundedPaneMain')
     container.select('*').remove()
     container.attr('style', 'height: 600px')
@@ -139,6 +230,7 @@ class FlightVisualization
         .style('fill', 'white')
 
   prepareScales: ->
+    # Prepare all d3 scales used for this visualization
     @airportScale = d3.scale.ordinal()
     @airportScale.domain(@airportsList)
     @airportScale.rangeBands([30, @height])
@@ -158,6 +250,7 @@ class FlightVisualization
     @priceScale.interpolate = d3.interpolateHsl
 
   drawYAxis: ->
+    # Draw the axis of airport labels
     @svg.selectAll('text.yAxis')
       .data(@airportsList)
       .enter()
@@ -169,10 +262,12 @@ class FlightVisualization
         .text((airport) -> airport)
 
   drawTimes: ->
+    # Draw the time labels and dots
     airportScale = @airportScale
     dateScale = @dateScale
     airports = @airports
     hourScale = @hourScale
+
     @svg.selectAll('g.timeGroup')
       .data(@airportsList)
       .enter()
@@ -182,6 +277,19 @@ class FlightVisualization
         g = d3.select(this)
         g.attr('transform', "translate(0, #{airportScale(airportCode)})")
 
+        # Convert a time from UTC to the airport's time zone
+        timeToLocal = (time) ->
+          moment.utc(time).clone().subtract('minutes', airport.tz)
+
+        # Convert a time to a label
+        timeFormat = (time) ->
+          timeToLocal(time).format('ha')
+
+        # Convert a time to a color
+        timeToColor = (time) ->
+          hourScale(timeToLocal(time).hours())
+
+        # Draw the fainter, more plentiful dots
         g.selectAll('circle.y')
           .data(dateScale.ticks(60))
           .enter()
@@ -189,20 +297,19 @@ class FlightVisualization
             .attr('cx', dateScale)
             .attr('r', 2)
             .style('opacity', 0.3)
-            .attr 'fill', (time) ->
-              hourScale(moment.utc(time).clone().subtract('minutes', airport.tz).hours())
+            .attr('fill', timeToColor)
 
+        # Draw the darker dots corresponding to labels
         g.selectAll('circle.x')
           .data(dateScale.ticks(20))
           .enter()
             .append('circle')
             .attr('cx', dateScale)
             .attr('r', 2)
-            .attr 'fill', (time) ->
-              hourScale(moment.utc(time).clone().subtract('minutes', airport.tz).hours())
+            .attr('fill', timeToColor)
 
-        g
-          .selectAll('text')
+        # Draw the labels
+        g.selectAll('text')
           .data(dateScale.ticks(20))
           .enter()
             .append('text')
@@ -211,20 +318,21 @@ class FlightVisualization
             .attr('text-anchor', 'middle')
             .attr('font-size', '8px')
             .style('dominant-baseline', 'middle')
-            .text((time) -> moment.utc(time).clone().subtract('minutes', airport.tz).format('ha'))
-            .attr 'fill', (time) ->
-              hourScale(moment.utc(time).clone().subtract('minutes', airport.tz).hours())
-
+            .text(timeFormat)
+            .attr('fill', timeToColor)
 
   draw: ->
+    # This function drives the entire process of
+    # creating the visualization.
     @get_data()
-    console.log this
     @createSVG()
     @prepareScales()
     @drawYAxis()
     @drawTimes()
 
     legPath = (leg) =>
+      # Convert a leg into an SVG bezier curve instruction
+      # using the scales
       x1 = @dateScale(leg.departure)
       y1 = @airportScale(leg.origin.code) + leg.originGate * 6
       x2 = @dateScale(leg.arrival)
@@ -232,6 +340,7 @@ class FlightVisualization
       dip = (x2 - x1) * .6
       "M #{x1},#{y1} C #{x1 + dip},#{y1} #{x2 - dip},#{y2} #{x2},#{y2}"
 
+    # Plot the flights
     priceScale = @priceScale
     f = @svg.selectAll('g.flight')
         .data(@flights)
@@ -254,13 +363,16 @@ class FlightVisualization
 
             flightPath
                 .append('path')
-                .style('stroke', (leg) -> leg.carrier.color)
+                #.style('stroke', (leg) -> leg.carrier.color)
+                .style('stroke', priceScale(flight.price))
                 .style('stroke-width', '3')
                 .style('stroke-linecap', 'square')
                 .style('fill', 'none')
                 .attr('d', legPath)
 
   get_data: ->
+    # Gather the data from the ITA models and convert them into our
+    # model data structures
     itaData = @ita.flightsPage.flightsPanel.flightList
     carrierToColorMap = @ita.flightsPage.matrix.stopCarrierMatrix.carrierToColorMap
     isoOffsetInMinutes = @ita.isoOffsetInMinutes
@@ -270,7 +382,10 @@ class FlightVisualization
     @flights = []
     @carriers = {}
 
+    # Dummy carrier for time spent at the airport or on ground transit
+    # between airports
     @carriers.CONNECTION = new Carrier('CONNECTION', 'Connection', '#888')
+    
     # Flight time range
     @maxArrival = moment.utc(itaData.maxArrival)
     @minDeparture = moment.utc(itaData.minDeparture)
@@ -321,16 +436,17 @@ class FlightVisualization
       duration = 0
       for itaLeg, legIndex in itaLegs
         if lastLeg?
+          # Create a dummy leg for the connection
           leg = new Leg(@airports[lastLeg.destination],
                         @airports[itaLeg.origin],
                         moment.utc(lastLeg.arrival),
                         moment.utc(itaLeg.departure),
                         @carriers.CONNECTION)
-          if legs.length > 0
-            legs[legs.length-1].nextLeg = leg
-            leg.prevLeg = legs[legs.length-1]
+          leg.setPrevLeg(legs[legs.length-1])
           legs.push(leg)
 
+          # If this connection requires ground transportation,
+          # ensure the airports are grouped together in the visualization
           if lastLeg.destination != itaLeg.origin
             @airports[lastLeg.destination].pairWith(@airports[itaLeg.origin])
 
@@ -342,13 +458,13 @@ class FlightVisualization
         airportDestination.setTz(isoOffsetInMinutes(itaLeg.arrival))
 
         # Update hops table
-        airportOrigin.setMinHops(legIndex)
-        airportDestination.setMinHops(legIndex + 1)
+        airportOrigin.suggestMinHops(legIndex)
+        airportDestination.suggestMinHops(legIndex + 1)
 
         # Update duration
-        airportOrigin.setMinDuration(duration)
+        airportOrigin.suggestMinDuration(duration)
         duration = duration + itaLeg.duration
-        airportDestination.setMinDuration(duration)
+        airportDestination.suggestMinDuration(duration)
 
         # Save leg
         leg = new Leg(airportOrigin,
@@ -357,9 +473,7 @@ class FlightVisualization
                       moment.utc(itaLeg.arrival),
                       @carriers[itaLeg.carrier])
 
-        if legs.length > 0
-          legs[legs.length-1].nextLeg = leg
-          leg.prevLeg = legs[legs.length-1]
+        leg.setPrevLeg(legs[legs.length-1])
 
         legs.push(leg)
         lastLeg = itaLeg
@@ -386,7 +500,7 @@ class FlightVisualization
         valid_airports[leg.origin.code] = leg.origin
         valid_airports[leg.destination.code] = leg.destination
 
-    # Create a list of Flight Events
+    # Create a list of Flight Events, for the gate assigning algorithm
     flightEvents = []
     for flight in @flights
       for leg in flight.legs
@@ -438,8 +552,6 @@ class FlightVisualization
         gate = event.airport.touchGate()
         event.leg.originGate = gate
         event.leg.prevLeg.destinationGate = gate
-
-        
 
     # Create a sorted list of airports
     @airportsList = (airport for i, airport of valid_airports).sort(Airport.compare)
