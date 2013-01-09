@@ -85,9 +85,10 @@ class Leg
 
 class Airport
   # Represent an airport
-  constructor: (@code, @city, @timezone, @type) ->
+  constructor: (@code, @name, @city, @timezone, @type) ->
     # Arguments
     #   code      the airport's code
+    #   name      the name of the airport
     #   city      the airport's City
     #   timezone  the airport's UTC offset in minutes
     #   type      'origin', 'destionation', or 'connection'
@@ -227,7 +228,7 @@ class FlightVisualization
     @svg.append('rect')
         .attr('width', @width)
         .attr('height', @height)
-        .style('fill', 'white')
+        .style('fill', 'black')
 
   prepareScales: ->
     # Prepare all d3 scales used for this visualization
@@ -237,7 +238,7 @@ class FlightVisualization
 
     @dateScale = d3.time.scale()
     @dateScale.domain([@minDeparture, @maxArrival])
-    @dateScale.range([40, @width - 20])
+    @dateScale.range([50, @width - 20])
 
     @priceScale = d3.scale.linear()
     @priceScale.domain([@minPrice, @maxPrice])
@@ -251,15 +252,33 @@ class FlightVisualization
 
   drawYAxis: ->
     # Draw the axis of airport labels
-    @svg.selectAll('text.yAxis')
-      .data(@airportsList)
-      .enter()
+    l = @svg.selectAll('text.yAxis')
+          .data(@airportsList)
+          .enter()
+    l
         .append('text')
+        .style('fill', 'white')
         .attr('x', 10)
         .attr('y', @airportScale)
         .style('dominant-baseline', 'middle')
         .style('font-weight', 'bold')
         .text((airport) -> airport)
+
+    l
+        .append('text')
+        .style('fill', '#aaa')
+        .attr('x', 10)
+        .attr('y', (x) => @airportScale(x) + 15)
+        .style('dominant-baseline', 'middle')
+        .text((airport) => @airports[airport].name)
+
+    l
+        .append('text')
+        .style('fill', '#aaa')
+        .attr('x', 10)
+        .attr('y', (x) => @airportScale(x) + 30)
+        .style('dominant-baseline', 'middle')
+        .text((airport) => @airports[airport].city.name)
 
   drawTimes: ->
     # Draw the time labels and dots
@@ -354,17 +373,16 @@ class FlightVisualization
 
             flightPath
                 .append('path')
-                .style('stroke', 'white')
+                .style('stroke', 'black')
                 .style('stroke-width', '7')
                 .style('stroke-linecap', 'square')
                 .style('fill', 'none')
-                .style('opacity', '.8')
                 .attr('d', legPath)
 
             flightPath
                 .append('path')
-                #.style('stroke', (leg) -> leg.carrier.color)
-                .style('stroke', priceScale(flight.price))
+                .style('stroke', (leg) -> leg.carrier.color)
+                #.style('stroke', priceScale(flight.price))
                 .style('stroke-width', '3')
                 .style('stroke-linecap', 'square')
                 .style('fill', 'none')
@@ -401,7 +419,7 @@ class FlightVisualization
         type = 'destination'
       else
         type = 'connection'
-      airport = new Airport(code, @cities[itaAirport.city],
+      airport = new Airport(code, itaAirport.name, @cities[itaAirport.city],
         itaAirport.name, type)
       @airports[code] = airport
 
