@@ -359,14 +359,49 @@ class FlightVisualization
       dip = (x2 - x1) * .6
       "M #{x1},#{y1} C #{x1 + dip},#{y1} #{x2 - dip},#{y2} #{x2},#{y2}"
 
+    svg = @svg
+    priceScale = @priceScale
+    dateScale = @dateScale
+    drawDetails = ->
+      flight = this.__data__
+
+      d3.select(this).selectAll('path.flight')
+        .style('stroke', (leg) -> leg.carrier.color)
+
+      rect = svg.append('rect')
+              .attr('class', 'backdrop')
+              .attr('x', dateScale(flight.startTime))
+              .attr('width', dateScale(flight.endTime) - dateScale(flight.startTime))
+              .attr('y', 0)
+              .attr('height', 600)
+              .style('fill', 'black')
+              .style('opacity', 0)
+              .transition()
+              .style('opacity', 0.8)
+
+      this.parentNode.appendChild(this)
+
+    hideDetails = ->
+      flight = this.__data__
+      this.parentNode.appendChild(this)
+
+      d3.select(this).selectAll('path.flight')
+        .style('stroke', priceScale(flight.price))
+
+      d3.select(this.parentNode).selectAll('rect.backdrop')
+        .transition()
+        .style('opacity', 0)
+        .remove()
+
+
     # Plot the flights
     priceScale = @priceScale
     f = @svg.selectAll('g.flight')
         .data(@flights)
         .enter()
           .append('g')
-          .on('mouseover', ->
-            this.parentNode.appendChild(this))
+          .on('mouseover', drawDetails)
+          .on('mouseout', hideDetails)
           .each (flight) ->
             flightPath = d3.select(this)
                           .selectAll('path')
@@ -383,8 +418,9 @@ class FlightVisualization
 
             flightPath
                 .append('path')
-                .style('stroke', (leg) -> leg.carrier.color)
-                #.style('stroke', priceScale(flight.price))
+                .attr('class', 'flight')
+                #.style('stroke', (leg) -> leg.carrier.color)
+                .style('stroke', priceScale(flight.price))
                 .style('stroke-width', '3')
                 .style('stroke-linecap', 'square')
                 .style('fill', 'none')
@@ -404,7 +440,7 @@ class FlightVisualization
 
     # Dummy carrier for time spent at the airport or on ground transit
     # between airports
-    @carriers.CONNECTION = new Carrier('CONNECTION', 'Connection', '#888')
+    @carriers.CONNECTION = new Carrier('CONNECTION', 'Connection', '#eee')
 
     # Load City data
     for code, itaCity of itaData.data.cities
