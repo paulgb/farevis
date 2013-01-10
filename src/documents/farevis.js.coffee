@@ -362,22 +362,60 @@ class FlightVisualization
     svg = @svg
     priceScale = @priceScale
     dateScale = @dateScale
+    airportScale = @airportScale
+    width = @width
+    height = @height
     drawDetails = ->
       flight = this.__data__
 
       d3.select(this).selectAll('path.flight')
+        .transition()
         .style('stroke', (leg) -> leg.carrier.color)
 
-      rect = svg.append('rect')
-              .attr('class', 'backdrop')
-              .attr('x', dateScale(flight.startTime))
-              .attr('width', dateScale(flight.endTime) - dateScale(flight.startTime))
-              .attr('y', 0)
-              .attr('height', 600)
-              .style('fill', 'black')
-              .style('opacity', 0)
-              .transition()
-              .style('opacity', 0.8)
+      svg.append('rect')
+        .attr('class', 'backdrop')
+        .attr('x', 0)
+        .attr('width', width)
+        .attr('y', 0)
+        .attr('height', height)
+        .style('fill', 'black')
+        .style('opacity', 0)
+        .transition()
+        .style('opacity', 0.8)
+
+      legs = svg.selectAll('text.label')
+               .data(flight.legs.filter((leg) -> leg.carrier.code != 'CONNECTION'))
+               .enter()
+
+      legs
+        .append('text')
+        .attr('class', 'label')
+        .text((leg) -> moment.utc(leg.departure).clone().subtract('minutes', leg.origin.tz).format('h:mma'))
+        .attr('x', (leg) -> dateScale(leg.departure))
+        .attr('y', (leg) -> airportScale(leg.origin.code) - 10 + 6 * leg.originGate)
+        .style('fill', 'white')
+        .style('dominant-baseline', 'middle')
+        .attr('text-anchor', 'middle')
+
+      legs
+        .append('text')
+        .attr('class', 'label')
+        .text((leg) -> moment.utc(leg.arrival).clone().subtract('minutes', leg.destination.tz).format('h:mma'))
+        .attr('x', (leg) -> dateScale(leg.arrival))
+        .attr('y', (leg) -> airportScale(leg.destination.code) + 14 + 6 * leg.destinationGate)
+        .style('fill', 'white')
+        .style('dominant-baseline', 'middle')
+        .attr('text-anchor', 'middle')
+
+      carrierLabels = svg.selectAll('text.carrier')
+        .data(flight.legs.filter((leg) -> leg.carrier.code != 'CONNECTION'))
+        .enter()
+        .append('text')
+        .attr('class', 'carrier')
+        .text((leg) -> "#{leg.carrier.name} (#{leg.origin.code} to #{leg.destination.code})")
+        .style('fill', 'white')
+        .attr('x', (leg) -> (dateScale(leg.arrival) + dateScale(leg.departure)) / 2 + 10)
+        .attr('y', (leg) -> (airportScale(leg.destination.code) + airportScale(leg.origin.code)) / 2)
 
       this.parentNode.appendChild(this)
 
@@ -386,7 +424,14 @@ class FlightVisualization
       this.parentNode.appendChild(this)
 
       d3.select(this).selectAll('path.flight')
+        .transition()
         .style('stroke', priceScale(flight.price))
+
+      d3.select(this.parentNode).selectAll('text.label')
+        .remove()
+
+      d3.select(this.parentNode).selectAll('text.carrier')
+        .remove()
 
       d3.select(this.parentNode).selectAll('rect.backdrop')
         .transition()
