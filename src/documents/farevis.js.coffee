@@ -365,6 +365,8 @@ class FlightVisualization
         .data(@flights)
         .enter()
           .append('g')
+          .on('mouseover', ->
+            this.parentNode.appendChild(this))
           .each (flight) ->
             flightPath = d3.select(this)
                           .selectAll('path')
