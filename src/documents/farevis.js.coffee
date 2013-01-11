@@ -26,7 +26,7 @@ class Flight
   getDuration: ->
     # Calculate the duration of this flight in hours:minutes
     # and return it as a string
-    moment.utc(@endTime.diff(@startTime)).format('H:mm')
+    ita.formatDuration(@endTime.diff(@startTime, 'minutes'))
   
   formatPrice: ->
     ita.formatCurrency(@price)
@@ -266,20 +266,25 @@ class FlightVisualization
         .transition()
         .style('opacity', 1)
 
+    @margin = 30
     @width = @svg[0][0].offsetWidth
     @height = @svg[0][0].offsetHeight
+    @svg.attr('viewBox', "0 0 #{@width} #{@height}")
 
     # black backdrop
     @svg.append('rect')
-        .attr('width', '100%')
-        .attr('height', '100%')
+        .attr('x', -2500)
+        .attr('y', -2500)
+        .attr('width', 5000)
+        .attr('height', 5000)
         .style('fill', 'black')
 
     # close button
     @svg.append('text')
-        .text('Close')
-        .attr('x', @width - 40)
-        .attr('y', 40)
+        .text('(Close)')
+        .attr('x', @width - 10)
+        .attr('y', 25)
+        .style('text-anchor', 'end')
         .on('click', => @svg.transition().style('opacity', 0).remove())
         .style('fill', 'white')
 
@@ -289,12 +294,12 @@ class FlightVisualization
     # Scale used on the Y axis
     @airportScale = d3.scale.ordinal()
     @airportScale.domain(@airportsList)
-    @airportScale.rangeBands([30, @height])
+    @airportScale.rangeBands([@margin * 2, @height])
 
     # Time scale used on the X axis
     @dateScale = d3.time.scale()
     @dateScale.domain([@minDeparture, @maxArrival])
-    @dateScale.range([50, @width - 20])
+    @dateScale.range([@margin + 50, @width - @margin * 2])
 
     # Color scale used for prices
     @priceScale = d3.scale.linear()
@@ -318,7 +323,7 @@ class FlightVisualization
     l
         .append('text')
         .style('fill', 'white')
-        .attr('x', 10)
+        .attr('x', @margin)
         .attr('y', @airportScale)
         .style('dominant-baseline', 'middle')
         .style('font-weight', 'bold')
@@ -328,7 +333,7 @@ class FlightVisualization
     l
         .append('text')
         .style('fill', '#aaa')
-        .attr('x', 10)
+        .attr('x', @margin)
         .attr('y', (x) => @airportScale(x) + 15)
         .style('dominant-baseline', 'middle')
         .text((airport) => @airports[airport].name)
@@ -337,7 +342,7 @@ class FlightVisualization
     l
         .append('text')
         .style('fill', '#aaa')
-        .attr('x', 10)
+        .attr('x', @margin)
         .attr('y', (x) => @airportScale(x) + 30)
         .style('dominant-baseline', 'middle')
         .text((airport) => @airports[airport].city.name)
@@ -426,6 +431,7 @@ class FlightVisualization
     width = @width
     height = @height
     currency = @currency
+    margin = @margin
 
     showDetails = (flight) ->
       # When the user "rolls over" a flight with their mouse,
@@ -448,11 +454,14 @@ class FlightVisualization
         .transition()
         .style('opacity', 0.8)
 
+      # Bring the flight in front of the backdrop
+      this.parentNode.appendChild(this)
+
       # show flight price
       svg.append('text')
         .attr('class', 'flightInfo')
-        .attr('x', width - 10)
-        .attr('y', 20)
+        .attr('x', width - margin)
+        .attr('y', margin + 30)
         .style('text-anchor', 'end')
         .style('font-size', '20px')
         .attr('fill', priceScale(flight.price))
@@ -461,20 +470,17 @@ class FlightVisualization
       # show flight departure
       svg.append('text')
         .attr('class', 'flightInfo')
-        .attr('x', width - 10)
-        .attr('y', 40)
+        .attr('x', width - margin)
+        .attr('y', margin + 50)
         .attr('fill', '#eee')
         .style('text-anchor', 'end')
-        .html("""Depart:
-          <tspan style="font-weight: bold">#{flight.getDeparture()}</tspan>
-          at
-          <tspan style="font-weight: bold">#{flight.getOrigin().code}</tspan>""")
+        .text('Depart: ' + flight.getDeparture() + ' at ' + flight.getOrigin().code)
       
       # show flight departure
       svg.append('text')
         .attr('class', 'flightInfo')
-        .attr('x', width - 10)
-        .attr('y', 60)
+        .attr('x', width - margin)
+        .attr('y', margin + 65)
         .attr('fill', '#eee')
         .style('text-anchor', 'end')
         .text('Arrive: ' + flight.getArrival() + ' at ' + flight.getDestination().code)
@@ -482,8 +488,8 @@ class FlightVisualization
       # show flight time
       svg.append('text')
         .attr('class', 'flightInfo')
-        .attr('x', width - 10)
-        .attr('y', 80)
+        .attr('x', width - margin)
+        .attr('y', margin + 80)
         .attr('fill', '#eee')
         .style('text-anchor', 'end')
         .text('Duration: ' + flight.getDuration())
@@ -508,7 +514,7 @@ class FlightVisualization
       legs
         .append('text')
         .attr('class', 'label')
-        .text((leg) -> leg.origin.toLocal(leg.arrival).format('h:mma'))
+        .text((leg) -> leg.destination.toLocal(leg.arrival).format('h:mma'))
         .attr('x', (leg) -> dateScale(leg.arrival))
         .attr('y', (leg) -> airportScale(leg.destination.code) + 14 + 6 * leg.destinationGate)
         .style('fill', 'white')
@@ -526,7 +532,6 @@ class FlightVisualization
         .attr('x', (leg) -> (dateScale(leg.arrival) + dateScale(leg.departure)) / 2 + 10)
         .attr('y', (leg) -> (airportScale(leg.destination.code) + airportScale(leg.origin.code)) / 2)
 
-      this.parentNode.appendChild(this)
 
     hideDetails = (flight) ->
       # When a user moves their mouse off of a flight, this
