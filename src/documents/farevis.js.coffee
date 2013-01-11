@@ -805,7 +805,7 @@ main = ->
       document.location = 'http://matrix.itasoftware.com/'
       return
   if not ita.flightsPage?
-    alert("It looks like you're not on a results page. Do a one-way flight search to visualize the results.")
+    alert("It looks like you're not on a results page. Do a flight search to visualize the results.")
     return
   if not ita.flightsPage.flightsPanel.flightList.summary?.solutions?
     # Click "Time bars" link
