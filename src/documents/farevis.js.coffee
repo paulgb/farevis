@@ -27,6 +27,9 @@ class Flight
     # Calculate the duration of this flight in hours:minutes
     # and return it as a string
     moment.utc(@endTime.diff(@startTime)).format('H:mm')
+  
+  formatPrice: ->
+    ita.formatCurrency(@price)
 
   getDeparture: =>
     @getOrigin().toLocal(@startTime).format('HH:mm')
@@ -258,6 +261,7 @@ class FlightVisualization
         .style('top', 0)
         .style('bottom', 0)
         .style('right', 0)
+        .style('z-index', 100)
         .style('opacity', 0)
         .transition()
         .style('opacity', 1)
@@ -356,7 +360,7 @@ class FlightVisualization
 
         # Convert a time to a label
         timeFormat = (time) ->
-          airport.toLocal().format('ha')
+          airport.toLocal(time).format('ha')
 
         # Convert a time to a color
         timeToColor = (time) ->
@@ -447,33 +451,41 @@ class FlightVisualization
       # show flight price
       svg.append('text')
         .attr('class', 'flightInfo')
-        .attr('x', width - 140)
+        .attr('x', width - 10)
         .attr('y', 20)
+        .style('text-anchor', 'end')
+        .style('font-size', '20px')
         .attr('fill', priceScale(flight.price))
-        .text(currency + ' ' + flight.price)
+        .text(currency + ' ' + flight.formatPrice())
       
       # show flight departure
       svg.append('text')
         .attr('class', 'flightInfo')
-        .attr('x', width - 140)
+        .attr('x', width - 10)
         .attr('y', 40)
         .attr('fill', '#eee')
-        .text('Depart: ' + flight.getDeparture() + ' at ' + flight.getOrigin().code)
+        .style('text-anchor', 'end')
+        .html("""Depart:
+          <tspan style="font-weight: bold">#{flight.getDeparture()}</tspan>
+          at
+          <tspan style="font-weight: bold">#{flight.getOrigin().code}</tspan>""")
       
       # show flight departure
       svg.append('text')
         .attr('class', 'flightInfo')
-        .attr('x', width - 140)
+        .attr('x', width - 10)
         .attr('y', 60)
         .attr('fill', '#eee')
+        .style('text-anchor', 'end')
         .text('Arrive: ' + flight.getArrival() + ' at ' + flight.getDestination().code)
 
       # show flight time
       svg.append('text')
         .attr('class', 'flightInfo')
-        .attr('x', width - 140)
+        .attr('x', width - 10)
         .attr('y', 80)
         .attr('fill', '#eee')
+        .style('text-anchor', 'end')
         .text('Duration: ' + flight.getDuration())
         
       # attach the flight's "real" legs (ie. not connections)
@@ -583,6 +595,7 @@ class FlightVisualization
     itaData = @ita.flightsPage.flightsPanel.flightList
     carrierToColorMap = @ita.flightsPage.matrix.stopCarrierMatrix.carrierToColorMap
     isoOffsetInMinutes = @ita.isoOffsetInMinutes
+    console.log itaData
 
     @cities = {}
     @airports = {}
@@ -688,10 +701,12 @@ class FlightVisualization
         lastLeg = itaLeg
 
       flight = new Flight(legs, price, startTime, endTime, index)
-      flight.click = ->
+      flight.click = =>
         # Function to be called when the flight is "clicked" in the UI
-        btn = document.getElementById('ita_shop_timeline_TimelineRow_'+@index)
-        btn.firstChild.firstChild.click()
+        console.log flight
+        btn = document.getElementById('solutionList').getElementsByClassName('itaPrice')[flight.index]
+        btn.click()
+        @svg.transition().style('opacity', 0).remove()
       @flights.push(flight)
 
     # Get rid of duplicate and inferior flights
@@ -778,6 +793,23 @@ class FlightVisualization
     @airportsList = (airport.code for airport in @airportsList)
 
 main = ->
+  if not ita?
+    if confirm("It looks like you're not on the ITA Flight Matrix. Go there now?")
+      document.location = 'http://matrix.itasoftware.com/'
+      return
+  if not ita.flightsPage?
+    alert("It looks like you're not on a results page. Do a one-way flight search to visualize the results.")
+    return
+  if not ita.flightsPage.flightsPanel.flightList.summary?.solutions?
+    # Click "Time bars" link
+    for a in document.getElementsByTagName('a')
+      if a.textContent == 'Time bars'
+        if confirm("This visualization only works from the 'time bars' view.'"+
+            " Go there now? (Press this button again when you get there.)")
+          a.click()
+          break
+        return
+
   vis = new FlightVisualization(ita)
   vis.draw()
 
