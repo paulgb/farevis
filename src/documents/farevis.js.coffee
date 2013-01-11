@@ -219,16 +219,36 @@ class FlightVisualization
   createSVG: ->
     # Drop the old visualization from the page and create an
     # svg object to contain the new one.
-    container = d3.select('#solutionPane td.itaRoundedPaneMain')
-    container.select('*').remove()
-    container.attr('style', 'height: 600px')
+    d3.selectAll('body svg').remove()
+    container = d3.select('body')
     @svg = container.append('svg:svg')
+        .style('z-index', 20)
+        .style('left', 0)
+        .style('position', 'fixed')
+        .style('top', 0)
+        .style('bottom', 0)
+        .style('right', 0)
+        .style('opacity', 0)
+    @svg
+        .transition()
+        .style('opacity', 1)
+
     @width = @svg[0][0].offsetWidth
     @height = @svg[0][0].offsetHeight
+
     @svg.append('rect')
         .attr('width', @width)
         .attr('height', @height)
         .style('fill', 'black')
+
+    @svg.append('text')
+        .text('Close')
+        .attr('x', @width - 40)
+        .attr('y', 40)
+        .on('click', => @svg.transition().style('opacity', 0).remove())
+        .style('fill', 'white')
+
+    window.svg = @svg
 
   prepareScales: ->
     # Prepare all d3 scales used for this visualization
@@ -445,6 +465,11 @@ class FlightVisualization
         .data(@flights)
         .enter()
           .append('g')
+          .on('click', ->
+            flight = this.__data__
+            console.log 'ita_shop_timeline_TimelineRow_'+flight.index
+            console.log document.getElementById('ita_shop_timeline_TimelineRow_'+flight.index)
+            document.getElementById('ita_shop_timeline_TimelineRow_'+flight.index).firstChild.firstChild.click())
           .on('mouseover', drawDetails)
           .on('mouseout', hideDetails)
           .each (flight) ->
@@ -502,7 +527,11 @@ class FlightVisualization
         type = 'destination'
       else
         type = 'connection'
-      airport = new Airport(code, itaAirport.name, @cities[itaAirport.city],
+      if typeof(itaAirport.city) == 'object'
+        city = itaAirport.city
+      else
+        city = @cities[itaAirport.city]
+      airport = new Airport(code, itaAirport.name, city,
         itaAirport.name, type)
       @airports[code] = airport
 
@@ -596,7 +625,6 @@ class FlightVisualization
         @minDeparture = flight.startTime
       if not @maxArrival? or flight.endTime > @maxArrival
         @maxArrival = flight.endTime
-    console.log @minDeparture, @maxArrival
 
     # Trim airports
     valid_airports = {}
