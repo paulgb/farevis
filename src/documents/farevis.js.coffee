@@ -253,6 +253,9 @@ class FlightVisualization
     d3.selectAll('body svg').remove()
     container = d3.select('body')
 
+    @width = window.innerWidth
+    @height = window.innerHeight
+
     @svg = container.append('svg:svg')
 
     @svg
@@ -267,8 +270,6 @@ class FlightVisualization
         .style('opacity', 1)
 
     @margin = 30
-    @width = @svg[0][0].offsetWidth
-    @height = @svg[0][0].offsetHeight
     @svg.attr('viewBox', "0 0 #{@width} #{@height}")
 
     # black backdrop
@@ -706,12 +707,13 @@ class FlightVisualization
         lastLeg = itaLeg
 
       flight = new Flight(legs, price, startTime, endTime, index)
-      flight.click = =>
+      svg = @svg
+      flight.click = ->
         # Function to be called when the flight is "clicked" in the UI
         console.log flight
-        btn = document.getElementById('solutionList').getElementsByClassName('itaPrice')[flight.index]
+        btn = document.getElementById('solutionList').getElementsByClassName('itaPrice')[@index]
         btn.click()
-        @svg.transition().style('opacity', 0).remove()
+        svg.transition().style('opacity', 0).remove()
       @flights.push(flight)
 
     # Get rid of duplicate and inferior flights
