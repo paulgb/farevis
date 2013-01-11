@@ -23,6 +23,23 @@ class Flight
     #   endTime     the end time of this flight
     #   index       any unique identifier for this flight
 
+  getDuration: ->
+    # Calculate the duration of this flight in hours:minutes
+    # and return it as a string
+    moment.utc(@endTime.diff(@startTime)).format('H:mm')
+
+  getDeparture: =>
+    @getOrigin().toLocal(@startTime).format('HH:mm')
+
+  getArrival: =>
+    @getDestination().toLocal(@endTime).format('HH:mm')
+
+  getOrigin: =>
+    @legs[0].origin
+
+  getDestination: =>
+    @legs[@legs.length-1].destination
+
   getRealLegs: ->
     # Get the "real" legs of a flight; those that involve
     # air transportation. This is useful since we also
@@ -404,8 +421,9 @@ class FlightVisualization
     airportScale = @airportScale
     width = @width
     height = @height
+    currency = @currency
 
-    drawDetails = (flight) ->
+    showDetails = (flight) ->
       # When the user "rolls over" a flight with their mouse,
       # this function is called to highlight that route and
       # give additonal details
@@ -426,6 +444,38 @@ class FlightVisualization
         .transition()
         .style('opacity', 0.8)
 
+      # show flight price
+      svg.append('text')
+        .attr('class', 'flightInfo')
+        .attr('x', width - 140)
+        .attr('y', 20)
+        .attr('fill', priceScale(flight.price))
+        .text(currency + ' ' + flight.price)
+      
+      # show flight departure
+      svg.append('text')
+        .attr('class', 'flightInfo')
+        .attr('x', width - 140)
+        .attr('y', 40)
+        .attr('fill', '#eee')
+        .text('Depart: ' + flight.getDeparture() + ' at ' + flight.getOrigin().code)
+      
+      # show flight departure
+      svg.append('text')
+        .attr('class', 'flightInfo')
+        .attr('x', width - 140)
+        .attr('y', 60)
+        .attr('fill', '#eee')
+        .text('Arrive: ' + flight.getArrival() + ' at ' + flight.getDestination().code)
+
+      # show flight time
+      svg.append('text')
+        .attr('class', 'flightInfo')
+        .attr('x', width - 140)
+        .attr('y', 80)
+        .attr('fill', '#eee')
+        .text('Duration: ' + flight.getDuration())
+        
       # attach the flight's "real" legs (ie. not connections)
       legs = svg.selectAll('text.label')
                .data(flight.getRealLegs())
@@ -484,6 +534,9 @@ class FlightVisualization
       d3.select(this.parentNode).selectAll('text.carrier')
         .remove()
 
+      d3.select(this.parentNode).selectAll('text.flightInfo')
+        .remove()
+
       # fade out backdrop
       d3.select(this.parentNode).selectAll('rect.backdrop')
         .transition()
@@ -497,7 +550,7 @@ class FlightVisualization
         .enter()
           .append('g')
           .on('click', (flight) -> flight.click())
-          .on('mouseover', drawDetails)
+          .on('mouseover', showDetails)
           .on('mouseout', hideDetails)
           .each (flight) ->
             flightPath = d3.select(this)
