@@ -23,6 +23,12 @@ class Flight
     #   endTime     the end time of this flight
     #   index       any unique identifier for this flight
 
+  getRealLegs: ->
+    # Get the "real" legs of a flight; those that involve
+    # air transportation. This is useful since we also
+    # use legs to represent connections and ground transit
+    @legs.filter((leg) -> leg.carrier.code != 'CONNECTION')
+
   superior: (otherFlight) ->
     # This function defines a partial order on flights.
     # A flight is considered superior if it starts at least
@@ -113,10 +119,6 @@ class Airport
       for member in @group
         member.group = @group
 
-  setTz: (@tz) ->
-    # Set the timezone of the airport (propogates to the city)
-    @city.tz = @tz
-
   suggestMinHops: (hops) ->
     # Suggest a minimum number of hops; if it is lower than the
     # current minimum hops or no minimum hops value is unset,
@@ -175,6 +177,15 @@ class Airport
     else
       return 0
 
+  toLocal: (time) ->
+    # Convert a UTC time to a time in this timezone.
+    # JavaScript can only represent time zones in UTC
+    # or the local timezone of the machine running the
+    # code, so we end up with a timezone that JavaScript
+    # thinks is UTC. Because of this we have to be sure
+    # only to call this once on any given time object.
+    moment.utc(time).clone().subtract('minutes', @tz)
+
   # Gate algorithm helper functions
   # The functions getGate, freeGate, and touchGate
   # are helper functions for the gate algorithm.
@@ -221,26 +232,29 @@ class FlightVisualization
     # svg object to contain the new one.
     d3.selectAll('body svg').remove()
     container = d3.select('body')
+
     @svg = container.append('svg:svg')
-        .style('z-index', 20)
-        .style('left', 0)
+
+    @svg
         .style('position', 'fixed')
+        .style('left', 0)
         .style('top', 0)
         .style('bottom', 0)
         .style('right', 0)
         .style('opacity', 0)
-    @svg
         .transition()
         .style('opacity', 1)
 
     @width = @svg[0][0].offsetWidth
     @height = @svg[0][0].offsetHeight
 
+    # black backdrop
     @svg.append('rect')
-        .attr('width', @width)
-        .attr('height', @height)
+        .attr('width', '100%')
+        .attr('height', '100%')
         .style('fill', 'black')
 
+    # close button
     @svg.append('text')
         .text('Close')
         .attr('x', @width - 40)
@@ -248,23 +262,26 @@ class FlightVisualization
         .on('click', => @svg.transition().style('opacity', 0).remove())
         .style('fill', 'white')
 
-    window.svg = @svg
-
   prepareScales: ->
     # Prepare all d3 scales used for this visualization
+    
+    # Scale used on the Y axis
     @airportScale = d3.scale.ordinal()
     @airportScale.domain(@airportsList)
     @airportScale.rangeBands([30, @height])
 
+    # Time scale used on the X axis
     @dateScale = d3.time.scale()
     @dateScale.domain([@minDeparture, @maxArrival])
     @dateScale.range([50, @width - 20])
 
+    # Color scale used for prices
     @priceScale = d3.scale.linear()
     @priceScale.domain([@minPrice, @maxPrice])
     @priceScale.range(['#00ff00', '#ff0000'])
     @priceScale.interpolate = d3.interpolateHsl
 
+    # Color scale used for hours of the day
     @hourScale = d3.scale.linear()
     @hourScale.domain([0, 12, 23])
     @hourScale.range(['#0000dd', '#dddd00', '#0000dd'])
@@ -273,8 +290,10 @@ class FlightVisualization
   drawYAxis: ->
     # Draw the axis of airport labels
     l = @svg.selectAll('text.yAxis')
-          .data(@airportsList)
-          .enter()
+        .data(@airportsList)
+        .enter()
+
+    # Airport Code
     l
         .append('text')
         .style('fill', 'white')
@@ -284,6 +303,7 @@ class FlightVisualization
         .style('font-weight', 'bold')
         .text((airport) -> airport)
 
+    # Airport Name
     l
         .append('text')
         .style('fill', '#aaa')
@@ -292,6 +312,7 @@ class FlightVisualization
         .style('dominant-baseline', 'middle')
         .text((airport) => @airports[airport].name)
 
+    # City Name
     l
         .append('text')
         .style('fill', '#aaa')
@@ -316,17 +337,13 @@ class FlightVisualization
         g = d3.select(this)
         g.attr('transform', "translate(0, #{airportScale(airportCode)})")
 
-        # Convert a time from UTC to the airport's time zone
-        timeToLocal = (time) ->
-          moment.utc(time).clone().subtract('minutes', airport.tz)
-
         # Convert a time to a label
         timeFormat = (time) ->
-          timeToLocal(time).format('ha')
+          airport.toLocal().format('ha')
 
         # Convert a time to a color
         timeToColor = (time) ->
-          hourScale(timeToLocal(time).hours())
+          hourScale(airport.toLocal(time).hours())
 
         # Draw the fainter, more plentiful dots
         g.selectAll('circle.y')
@@ -379,54 +396,64 @@ class FlightVisualization
       dip = (x2 - x1) * .6
       "M #{x1},#{y1} C #{x1 + dip},#{y1} #{x2 - dip},#{y2} #{x2},#{y2}"
 
+    # bring a bunch of variables into scope so we can use it
+    # in a closure without using "fat arrow" binding
     svg = @svg
     priceScale = @priceScale
     dateScale = @dateScale
     airportScale = @airportScale
     width = @width
     height = @height
-    drawDetails = ->
-      flight = this.__data__
 
+    drawDetails = (flight) ->
+      # When the user "rolls over" a flight with their mouse,
+      # this function is called to highlight that route and
+      # give additonal details
       d3.select(this).selectAll('path.flight')
         .transition()
         .style('stroke', (leg) -> leg.carrier.color)
 
+      # fade out other flights and chart space by adding a
+      # semi-transparent rect in front of them all
       svg.append('rect')
         .attr('class', 'backdrop')
         .attr('x', 0)
-        .attr('width', width)
         .attr('y', 0)
+        .attr('width', width)
         .attr('height', height)
         .style('fill', 'black')
         .style('opacity', 0)
         .transition()
         .style('opacity', 0.8)
 
+      # attach the flight's "real" legs (ie. not connections)
       legs = svg.selectAll('text.label')
-               .data(flight.legs.filter((leg) -> leg.carrier.code != 'CONNECTION'))
+               .data(flight.getRealLegs())
                .enter()
 
+      # departure times
       legs
         .append('text')
         .attr('class', 'label')
-        .text((leg) -> moment.utc(leg.departure).clone().subtract('minutes', leg.origin.tz).format('h:mma'))
+        .text((leg) -> leg.origin.toLocal(leg.departure).format('h:mma'))
         .attr('x', (leg) -> dateScale(leg.departure))
         .attr('y', (leg) -> airportScale(leg.origin.code) - 10 + 6 * leg.originGate)
         .style('fill', 'white')
         .style('dominant-baseline', 'middle')
         .attr('text-anchor', 'middle')
 
+      # arrival times
       legs
         .append('text')
         .attr('class', 'label')
-        .text((leg) -> moment.utc(leg.arrival).clone().subtract('minutes', leg.destination.tz).format('h:mma'))
+        .text((leg) -> leg.origin.toLocal(leg.arrival).format('h:mma'))
         .attr('x', (leg) -> dateScale(leg.arrival))
         .attr('y', (leg) -> airportScale(leg.destination.code) + 14 + 6 * leg.destinationGate)
         .style('fill', 'white')
         .style('dominant-baseline', 'middle')
         .attr('text-anchor', 'middle')
 
+      # carrier name and origin/destination labels
       carrierLabels = svg.selectAll('text.carrier')
         .data(flight.legs.filter((leg) -> leg.carrier.code != 'CONNECTION'))
         .enter()
@@ -439,25 +466,29 @@ class FlightVisualization
 
       this.parentNode.appendChild(this)
 
-    hideDetails = ->
-      flight = this.__data__
-      this.parentNode.appendChild(this)
+    hideDetails = (flight) ->
+      # When a user moves their mouse off of a flight, this
+      # function is called to remove the highlight and additional
+      # details
 
+      # color flight path by price, not carrier
       d3.select(this).selectAll('path.flight')
         .transition()
         .style('stroke', priceScale(flight.price))
 
+      # remove time labels
       d3.select(this.parentNode).selectAll('text.label')
         .remove()
 
+      # remove carrier labels
       d3.select(this.parentNode).selectAll('text.carrier')
         .remove()
 
+      # fade out backdrop
       d3.select(this.parentNode).selectAll('rect.backdrop')
         .transition()
         .style('opacity', 0)
         .remove()
-
 
     # Plot the flights
     priceScale = @priceScale
@@ -465,11 +496,7 @@ class FlightVisualization
         .data(@flights)
         .enter()
           .append('g')
-          .on('click', ->
-            flight = this.__data__
-            console.log 'ita_shop_timeline_TimelineRow_'+flight.index
-            console.log document.getElementById('ita_shop_timeline_TimelineRow_'+flight.index)
-            document.getElementById('ita_shop_timeline_TimelineRow_'+flight.index).firstChild.firstChild.click())
+          .on('click', (flight) -> flight.click())
           .on('mouseover', drawDetails)
           .on('mouseout', hideDetails)
           .each (flight) ->
@@ -478,6 +505,7 @@ class FlightVisualization
                           .data((flight) -> flight.legs)
                           .enter()
 
+            # Plot black outline around flights
             flightPath
                 .append('path')
                 .style('stroke', 'black')
@@ -486,10 +514,10 @@ class FlightVisualization
                 .style('fill', 'none')
                 .attr('d', legPath)
 
+            # Plot the flights themselves
             flightPath
                 .append('path')
                 .attr('class', 'flight')
-                #.style('stroke', (leg) -> leg.carrier.color)
                 .style('stroke', priceScale(flight.price))
                 .style('stroke-width', '3')
                 .style('stroke-linecap', 'square')
@@ -511,6 +539,8 @@ class FlightVisualization
     # Dummy carrier for time spent at the airport or on ground transit
     # between airports
     @carriers.CONNECTION = new Carrier('CONNECTION', 'Connection', '#eee')
+
+    @currency = itaData.summary.minPrice.substr(0, 3)
 
     # Load City data
     for code, itaCity of itaData.data.cities
@@ -580,8 +610,8 @@ class FlightVisualization
         airportDestination = @airports[itaLeg.destination]
 
         # Set time zones
-        airportOrigin.setTz(isoOffsetInMinutes(itaLeg.departure))
-        airportDestination.setTz(isoOffsetInMinutes(itaLeg.arrival))
+        airportOrigin.tz = isoOffsetInMinutes(itaLeg.departure)
+        airportDestination.tz = isoOffsetInMinutes(itaLeg.arrival)
 
         # Update hops table
         airportOrigin.suggestMinHops(legIndex)
@@ -605,6 +635,10 @@ class FlightVisualization
         lastLeg = itaLeg
 
       flight = new Flight(legs, price, startTime, endTime, index)
+      flight.click = ->
+        # Function to be called when the flight is "clicked" in the UI
+        btn = document.getElementById('ita_shop_timeline_TimelineRow_'+@index)
+        btn.firstChild.firstChild.click()
       @flights.push(flight)
 
     # Get rid of duplicate and inferior flights
