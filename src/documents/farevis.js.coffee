@@ -285,6 +285,7 @@ class FlightVisualization
         .text('(Close)')
         .attr('x', @width - 10)
         .attr('y', 25)
+        .style('cursor', 'pointer')
         .style('text-anchor', 'end')
         .on('click', => @svg.transition().style('opacity', 0).remove())
         .style('fill', 'white')
@@ -570,6 +571,7 @@ class FlightVisualization
           .on('click', (flight) -> flight.click())
           .on('mouseover', showDetails)
           .on('mouseout', hideDetails)
+          .style('cursor', 'pointer')
           .each (flight) ->
             flightPath = d3.select(this)
                           .selectAll('path')
