@@ -802,6 +802,9 @@ class FlightVisualization
     @airportsList = (airport.code for airport in @airportsList)
 
 main = ->
+  if document.location.host == 'bitaesthetics.com'
+    alert("To use the bookmarklet, see the instructions on the page.")
+    return
   if not ita?
     if confirm("It looks like you're not on the ITA Flight Matrix. Go there now?")
       document.location = 'http://matrix.itasoftware.com/'
